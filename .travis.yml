@@ -1,0 +1,8 @@
+language: python
+python:
+  - "3.4"
+install:
+  - sudo apt-get install -qq iverilog-daily
+script:
+  - cd test; make
+  

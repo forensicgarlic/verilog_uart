@@ -8,5 +8,5 @@ before_install:
   - sudo docker build -t hdl -f docker/Dockerfile .
 install:
 script:
-  -sudo docker run --rm -v ~/git:/git hdl bash -c "cd git/verilog_uart/test; make"
+  - sudo docker run --rm -v ~/git:/git hdl bash -c "cd git/verilog_uart/test; make"
   

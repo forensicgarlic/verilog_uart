@@ -11,3 +11,8 @@ cd verilog-10.2 ; \
 make  ; \
 make install
 
+#cocotb prerequisites
+RUN apt-get install -y swig
+
+#cocotb doesn't have a good way to install
+RUN git clone https://github.com/potentialventures/cocotb

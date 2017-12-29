@@ -10,9 +10,8 @@ before_install:
   - cd verilog-10.2
   - ./configure
   - make
-
-install:
   - make install
+install:
   - git clone https://github.com/potentialventures/cocotb
 script:
   - cd test

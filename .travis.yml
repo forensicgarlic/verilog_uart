@@ -16,7 +16,8 @@ before_install:
   - sudo make install
   - cd ..
 install:
-  - pwd
+  - ls
+  - cd ..
   - git clone https://github.com/potentialventures/cocotb
 script:
   - ls

@@ -16,9 +16,13 @@ before_install:
   - sudo make install
   - cd ..
 install:
+  - pwd
   - git clone https://github.com/potentialventures/cocotb
 script:
+  - ls
   - cd verilog_uart
+  - ls
   - cd test
+  - ls
   - make
   

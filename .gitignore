@@ -2,3 +2,6 @@
 *.vcd
 *~
 *.pyc
+**/sim_build/
+.#*
+**results.xml

@@ -19,5 +19,6 @@ install:
   - cd ..
   - git clone https://github.com/potentialventures/cocotb
 script:
+  - cd verilog_uart
   - make
   

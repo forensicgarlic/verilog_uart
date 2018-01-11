@@ -21,4 +21,5 @@ install:
 script:
   - cd verilog_uart
   - make
-  
+  - (exit $(find -name results.xml | xargs grep "failure message" | wc -l))
+

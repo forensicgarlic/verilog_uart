@@ -4,4 +4,4 @@
 *.pyc
 **/sim_build/
 .#*
-**results.xml
+results.xml

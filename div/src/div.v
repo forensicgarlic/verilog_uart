@@ -10,15 +10,17 @@ module div
 
    localparam WIDTH = $clog2 (PERIOD);
    reg [WIDTH - 1 : 0] cnt=0;
-
+   
    initial begin
       $display ("divider %m period set to %d", PERIOD);
       //simple immediate assertions not supported by iverilog 10.2
       //assert (PERIOD > 1) else $error("PERIOD must be greater than 1");
+      //$dumpfile ("div.vcd");
+      //$dumpvars(0, div);
    end
-   
+
    always @ (posedge clk_in)
-     if (clk_en == 1) begin
+     if (clk_en == 1 ) begin
 	cnt <= (cnt == PERIOD-1) ? 0 : cnt + 1;
 	pulse_out <= (cnt == PERIOD -1);
      end 
@@ -26,5 +28,8 @@ module div
 	cnt <= PERIOD -1;
 	pulse_out <= 0;
      end
+
+   
+      
 endmodule // div
 

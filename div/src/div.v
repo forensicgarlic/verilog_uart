@@ -20,16 +20,14 @@ module div
    end
 
    always @ (posedge clk_in)
-     if (clk_en == 1 ) begin
-	cnt <= (cnt == PERIOD-1) ? 0 : cnt + 1;
-	pulse_out <= (cnt == PERIOD -1);
-     end 
-     else begin
-	cnt <= PERIOD -1;
-	pulse_out <= 0;
-     end
+      if (clk_en == 1 ) begin
+         cnt <= (cnt == PERIOD-1) ? 0 : cnt + 1;
+         pulse_out <= (cnt == PERIOD -1);
+       end 
+       else begin
+          cnt <= PERIOD -1;
+          pulse_out <= 0;
+       end
 
-   
-      
 endmodule // div
 

@@ -17,7 +17,7 @@ before_install:
   - cd ..
 install:
   - cd ..
-  - git clone https://github.com/potentialventures/cocotb
+  - git clone https://github.com/forensicgarlic/cocotb
 script:
   - cd verilog_uart
   - make

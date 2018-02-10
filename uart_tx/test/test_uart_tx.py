@@ -17,6 +17,7 @@ class UartMonitor(BusMonitor):
         self.baud_rate = 104 # a lot of assumptions happening here.
         self.transmitting = False
         self.bits = 0
+        self.start_second = 0
         
     @cocotb.coroutine
     def _monitor_recv(self):
@@ -34,8 +35,9 @@ class UartMonitor(BusMonitor):
             if self.transmitting: 
                 self.baud_count = (self.baud_count + 1) % self.baud_rate
             transaction = self.bus.capture()
-            first =list(transaction.values())
-            first = first[0]
+            transaction_list_values =list(transaction.values())
+            first = transaction_list_values[0]
+            second = transaction_list_values[1]
             if self.in_reset: 
                 for x,y in transaction.items():
                     print("reset time %s -  %s : %s" %(get_sim_time("ns"),x,y))
@@ -45,6 +47,8 @@ class UartMonitor(BusMonitor):
                 self.bits = 0
             elif self.last_transaction != transaction and not self.transmitting and first == self.level:
                 self.transmitting = True
+                self.bits = 0
+                self.start_second = second
                 self.baud_count = self.baud_rate / 2
                 for x,y in transaction.items():
                     print("start time %s -  %s : %s" %(get_sim_time("ns"),x,y))
@@ -113,7 +117,7 @@ class uart_tb(object):
             if self.input_mon.bits == 0:
                 self.output_expected.pop() #ugh. are we putting in expectations for this cycle, or next? 
                 self.output_expected.append((0,0)) #start bit
-                self.shifter = transaction[1].integer
+                self.shifter = self.input_mon.start_second #transaction[1].integer
                 # shift data out 1 bit at a time
                 # yielding for end of character, so we don't keep throwing expecteds onto the list. 
                 # and adding the start and stop bits
@@ -126,7 +130,10 @@ class uart_tb(object):
 
         else:
             print ("tx model call -- idle :%d" % len(self.output_expected))
-            self.output_expected.append((1,1))
+            if self.input_mon.in_reset:
+                self.output_expected.append((1,0))
+            else:
+                self.output_expected.append((1,1))
         
     @cocotb.coroutine
     def reset_dut(self, reset, duration):
@@ -135,8 +142,18 @@ class uart_tb(object):
         reset <= 1
         self.dut._log.info("reset complete")
 
+    @cocotb.coroutine
+    def set_char(self, char):
+        yield RisingEdge(self.dut.clk)
+        self.dut.i_data <= ord(char)
+        self.dut.i_start <= 1
+        yield RisingEdge(self.dut.clk)
+        self.dut.i_start <= 0
+        self.dut._log.info("sent char %s" % char)
+        
+
 @cocotb.test()
-def initial_instance(dut):
+def test_1_send_a_char(dut):
     """
     send a character
     """
@@ -148,14 +165,62 @@ def initial_instance(dut):
 
     yield RisingEdge(dut.clk)
     yield Timer(10000)
-    yield RisingEdge(dut.clk)
-    dut.i_data <= ord('k')
-    dut.i_start <= 1
-    yield RisingEdge(dut.clk)
-    dut.i_start <= 0
+    yield tb.set_char('k')
     yield Timer(2000000)
 
-#// send a chararacter before ready, and it's ignored
-#// change data in middle of send, and it's ignored
-#// send multiple character's fast
+@cocotb.test()
+def test_2_ignore_ready(dut):
+    """
+    change data in middle of send, and it's ignored
+    """
+    tb = uart_tb(dut)
+    cocotb.fork(Clock(dut.clk, 1000).start())
+
+    yield tb.reset_dut(dut.rstn, 10000)
+
+    yield Timer(10000)
+    yield tb.set_char('K')
+
+    my_char = ord('O')
+    for i in range(15):
+        yield Timer(50000)
+        if dut.o_ready == 1:
+            raise TestFailure("ready was active unexpectently. Check the baud rate, and update the test to know it. ")
+        yield tb.set_char(chr(my_char + i))
+    yield Timer(2000000)
+
+
+
+@cocotb.test()
+def test_3_send_in_reset(dut):
+    """ 
+    send a chararacter before ready, and it's ignored
+    """
+    tb = uart_tb(dut)
+    cocotb.fork(Clock(dut.clk, 1000).start())
+
+    cocotb.fork(tb.reset_dut(dut.rstn,20000))
+
+    yield Timer(10000)
+    if dut.o_ready == 1:
+        raise TestFailure("ready was active unexpectently. Check the reset control. ")
+
+    yield tb.set_char('a')
+
+    yield Timer(1000000)
+
+@cocotb.test()
+def test_4_send_chars_fast(dut):
+    """
+     send multiple character's fast
+    """
+    tb = uart_tb(dut)
+    cocotb.fork(Clock(dut.clk, 1000).start())
+    yield tb.reset_dut(dut.rstn, 10000)
+    yield Timer(10000)
+    my_char = ord('C')
+    for i in range(10):
+        yield tb.set_char(chr(my_char + i))
+        yield RisingEdge(dut.o_ready)
+                       
 #// send multile character's slow

@@ -72,7 +72,14 @@
    localparam IDLE = 3'b001;
    localparam START = 3'b010;
    localparam TRANSMIT = 3'b100;
-   always @ (posedge clk) begin
+   always @ (posedge clk or negedge rstn) begin
+      if (rstn == 0) begin
+	 state <= IDLE;
+	 load <= 0;
+	 o_ready <= 0;
+	 baud_en <= 0;
+      end
+      else begin
       case(state)
 	IDLE:
 	  begin
@@ -119,6 +126,6 @@
 	  end
 
       endcase
-
+      end // not in reset
    end // always @ (posedge clk)
 endmodule // uart_tx

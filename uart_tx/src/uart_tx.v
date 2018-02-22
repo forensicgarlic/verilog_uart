@@ -22,14 +22,6 @@
    reg 		load = 0;
 
    
-   //wire 	start, data, ready, tx;
-
-   //assign start = i_start;
-   //assign data = i_data;
-   //assign o_ready = ready;
-   //assign o_tx = tx;
-
-   
    localparam DEFAULT_DATA = 10'h2FF;
 
    initial begin
@@ -67,7 +59,6 @@
 	counter <= counter + 1;
    end
 
-
    // State Machine
    localparam IDLE = 3'b001;
    localparam START = 3'b010;
@@ -80,52 +71,48 @@
 	 baud_en <= 0;
       end
       else begin
-      case(state)
-	IDLE:
-	  begin
-	     if (i_start == 1) begin
-		state <= START;
-		load <= 1;
-		o_ready <= 0;
-		baud_en <= 1;
-	     end else begin
-		load <=0;
-		o_ready <= 1;
-		baud_en <= 0;
+	 case(state)
+	   IDLE:
+	     begin
+		if (i_start == 1) begin
+		   state <= START;
+		   load <= 1;
+		   o_ready <= 0;
+		   baud_en <= 1;
+		end else begin
+		   load <=0;
+		   o_ready <= 1;
+		   baud_en <= 0;
+		end
 	     end
-	  end
-
-	START:
-	  begin
-	     state <= TRANSMIT;
-	     baud_en <= 1;
-	     load <= 0;
-	     o_ready <= 0;
-	     
-	  end
-	TRANSMIT:
-	  begin
-	     if (counter == 11) begin
-		state <= IDLE;
-		baud_en <= 0;
-	     end else begin
-		baud_en <= 1;
+	   
+	   START:
+	     begin
 		state <= TRANSMIT;
+		baud_en <= 1;
+		load <= 0;
+		o_ready <= 0;
 	     end
-	     o_ready <= 0;
-	     load <= 0;
-	     
-	  end
-
-	default:
-	  begin
-	     state <= IDLE;
-	     load <= 0;
-	     o_ready <= 0;
-	     baud_en <= 0;
-	  end
-
-      endcase
+	   TRANSMIT:
+	     begin
+		if (counter == 11) begin
+		   state <= IDLE;
+		   baud_en <= 0;
+		end else begin
+		   baud_en <= 1;
+		   state <= TRANSMIT;
+		end
+		o_ready <= 0;
+		load <= 0;
+	     end
+	   default:
+	     begin
+		state <= IDLE;
+		load <= 0;
+		o_ready <= 0;
+		baud_en <= 0;
+	     end
+	 endcase
       end // not in reset
    end // always @ (posedge clk)
 endmodule // uart_tx

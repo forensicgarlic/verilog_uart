@@ -10,16 +10,15 @@ from cocotb.utils import get_sim_time
 
 
 class UartMonitor(BusMonitor):
-    def __init__(self, entity, name, clock, trigger_transmit_state, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
+    def __init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
         BusMonitor.__init__(self, entity, name, clock, reset, reset_n, callback, event, bus_seperator)
         self.tts = trigger_transmit_state
         self.last_transaction = None
         self.baud_count = 0
-        self.baud_rate = 104 # a lot of assumptions happening here.
+        self.baud_rate = baud_rate
         self.transmitting = False
         self.bits = 0
         self.start_second = 0
-
         
     @cocotb.coroutine
     def _monitor_recv(self):
@@ -59,24 +58,22 @@ class UartMonitor(BusMonitor):
 class UartOMonitor(UartMonitor):
     _signals = [ "tx", "ready"]
 
-
-    def __init__(self, entity, name, clock, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
+    def __init__(self, entity, name, clock, baud_rate, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
+        #looking for tx going down as a start of baud rate checks for character duration
         def trigger_transmit_state(self,transaction, first):
             return self.last_transaction != transaction and not self.transmitting and first == 0
-        #looking for tx going down as a start of baud rate checks for character duration
-        UartMonitor.__init__(self, entity, name, clock, trigger_transmit_state, reset, reset_n, callback, event, bus_seperator)
+        UartMonitor.__init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset, reset_n, callback, event, bus_seperator)
 
         
 class UartIMonitor(UartMonitor):
     _signals = [ "start", "data" ]
 
 
-    def __init__(self, entity, name, clock, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
-        #looking for start going up as start of baud rate checks for character duration.
-        ### (is start functionality required to toggle low / high? this might end up being an issue. ) 
+    def __init__(self, entity, name, clock, baud_rate, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
+        #looking for start set high as start of baud rate checks for character duration.
         def trigger_transmit_state(self, transaction, first):
             return not self.transmitting and first == 1
-        UartMonitor.__init__(self, entity, name, clock, trigger_transmit_state, reset, reset_n, callback, event, bus_seperator)
+        UartMonitor.__init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset, reset_n, callback, event, bus_seperator)
         
 class UartDriver(BusDriver):
     _signals = [ "start", "data"]
@@ -85,16 +82,16 @@ class UartDriver(BusDriver):
         self.bus.start.setimmediatevalue(0)
         self.bus.data.setimmediatevalue(0)
             
-class uart_tb(object):
+class uart_tx_tb(object):
     def __init__(self, dut):
         self.dut = dut
-        self.output_mon = UartOMonitor(dut, "o", dut.clk, reset_n=dut.rstn)
-        self.input_mon = UartIMonitor(dut, "i", dut.clk, reset_n=dut.rstn, callback = self.tx_model)
-        self.input_drv = UartDriver(dut, "i", dut.clk )
+        self.output_mon = UartOMonitor(dut, "o", dut.clk, int(self.dut.BAUD), reset_n=dut.rstn)
+        self.input_mon = UartIMonitor(dut, "i", dut.clk, int(self.dut.BAUD), reset_n=dut.rstn, callback = self.tx_model)
+        self.input_drv = UartDriver(dut, "i", dut.clk ) #unused?
         self.output_expected = [(1,0)] #i don't think this should be necessary... 
         self.scoreboard = Scoreboard(dut)
 
-        self.output_mon.log.setLevel(logging.DEBUG)
+        #self.output_mon.log.setLevel(logging.DEBUG)
         
         #scoreboard is where results are checked. On each transaction of the output_mon, it'll compare against the
         #next transaction in the list output_expected. Output_expected gets updated by the tx_model. tx_model is the
@@ -102,7 +99,7 @@ class uart_tb(object):
         # its not obvious if on the same simulation cycle you can force the tx_model to get called before the
         # scoreboard gets called on 
         self.scoreboard.add_interface(self.output_mon, self.output_expected)
-        self.baud_rate = 103
+        self.baud_rate = int(self.dut.BAUD) -1
         self.baud_count = 0
         self.shifter = 0
         
@@ -151,7 +148,7 @@ def test_1_send_a_char(dut):
     """
     send a character
     """
-    tb = uart_tb(dut)
+    tb = uart_tx_tb(dut)
     tb.dut._log.info("running uarttx test")
     cocotb.fork(Clock(dut.clk, 1000).start())
 
@@ -167,7 +164,7 @@ def test_2_ignore_ready(dut):
     """
     change data in middle of send, and it's ignored
     """
-    tb = uart_tb(dut)
+    tb = uart_tx_tb(dut)
     cocotb.fork(Clock(dut.clk, 1000).start())
 
     yield tb.reset_dut(dut.rstn, 10000)
@@ -188,7 +185,7 @@ def test_3_send_in_reset(dut):
     """ 
     send a chararacter before ready, and it's ignored
     """
-    tb = uart_tb(dut)
+    tb = uart_tx_tb(dut)
     cocotb.fork(Clock(dut.clk, 1000).start())
 
     cocotb.fork(tb.reset_dut(dut.rstn,20000))
@@ -206,7 +203,7 @@ def test_4_send_chars_fast(dut):
     """
      send multiple character's fast
     """
-    tb = uart_tb(dut)
+    tb = uart_tx_tb(dut)
     cocotb.fork(Clock(dut.clk, 1000).start())
     yield tb.reset_dut(dut.rstn, 10000)
     yield Timer(10000)
@@ -223,7 +220,7 @@ def test_5_start_ignores_ready(dut):
     happens. 
     """
 
-    tb = uart_tb(dut)
+    tb = uart_tx_tb(dut)
     cocotb.fork(Clock(dut.clk, 1000).start())
     yield tb.reset_dut(dut.rstn, 10000)
     yield Timer(10000)

@@ -19,6 +19,7 @@ install:
   - git clone https://github.com/forensicgarlic/cocotb
   - cd cocotb
   - git checkout dls_own_hands
+  - cd ..
 script:
   - cd verilog_uart
   - make

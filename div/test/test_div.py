@@ -6,7 +6,7 @@ from cocotb.clock import Clock
 CLK_PERIOD = 1000
 
 @cocotb.test()
-def initial_access(dut):
+def test_1_initial_access(dut):
     """
     Try accessing the design, setting the Period Parameter
     """
@@ -26,7 +26,7 @@ def initial_access(dut):
         dut._log.info("Ok!")
 
 @cocotb.test()
-def period(dut):
+def test_2_period(dut):
     """
     verify period matches 10 (value set in makefile)
     """
@@ -50,7 +50,7 @@ def period(dut):
         yield RisingEdge(dut.clk_in)
     
 @cocotb.test()
-def pulse_width(dut):
+def test_3_pulse_width(dut):
     """
     verify pulse_width is 1 clk
     """
@@ -67,7 +67,7 @@ def pulse_width(dut):
 
 
 @cocotb.test()
-def clock_enable(dut):
+def test_4_clock_enable(dut):
     """
     verify clock enable turns on and off functionality 
     """

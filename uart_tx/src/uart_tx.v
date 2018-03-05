@@ -48,7 +48,7 @@
 	shifter <= {1'b1, shifter[9:1]};
    end
 
-   div #(BAUD)
+   div #(BAUD,BAUD)
    baudgen (.clk_in(clk), .clk_en(baud_en), .pulse_out(clk_baud));
 
    // state machine counter

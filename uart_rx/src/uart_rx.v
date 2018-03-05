@@ -1,16 +1,17 @@
 `default_nettype none
-`include "../../src/uart_tx/baudgen.vh"
+`include "../../uart_tx/src/baudgen.vh"
   
   module uart_rx
     #(parameter BAUD=`B115200)
     (input wire clk,
      input wire rstn,
-     input wire rx,
+     input wire i_rx,
      output reg [7:0] o_data,
      output reg o_rcv
-     )
+     );
+   
 
-   reg 		rcv_q = 0;
+   reg 		rx_q = 0;
    reg [9:0] 	shift_in = 0;
    wire		clk_baud;
    reg 		baud_en = 0;
@@ -27,24 +28,24 @@
 
    
    always @ (posedge clk) begin
-      rx_q <= rx;
+      rx_q <= i_rx;
    end
    
    always @ (posedge clk or negedge rstn) begin
       if (rstn == 0)
 	shift_in <= 0;
       else if (clk_baud == 1)
-	shift_in <= {shift_in[8:0], rx_q};
+	shift_in <= {rx_q, shift_in[9:1]};
    end
 
    always @ (posedge clk or negedge rstn) begin
       if (rstn == 0)
 	o_data <= 0;
       else if (load == 1)
-	o_data <= shift_in[7:0];
+	o_data <= shift_in[8:1];
    end
 
-   div #(BAUD)
+   div #(BAUD, BAUD/2)
    baudgen (.clk_in(clk), .clk_en(baud_en), .pulse_out(clk_baud));
    
       
@@ -64,8 +65,9 @@
       if (rstn == 0) begin
 	 state <= IDLE;
 	 load <= 0;
-	 rcv <= 0;
+	 o_rcv <= 0;
 	 clear <= 0;
+	 baud_en <= 0;
       end
       else
 	case (state)
@@ -76,7 +78,8 @@
 	       else
 		 state <= IDLE;
 	       load <= 0;
-	       rcv <= 0;
+	       o_rcv <= 0;
+	       baud_en <= 0;
 	       clear <= 1;
 	    end
 	  RCV:
@@ -86,21 +89,24 @@
 	       else
 		 state <= RCV;
 	       load <= 0;
-	       rcv <= 0;
+	       o_rcv <= 0;
+	       baud_en <= 1;
 	       clear <= 0;
 	    end
 	  LOAD:
 	    begin
 	       state <= DATA_VALID;
 	       load <= 1;
-	       rcv <= 0;
+	       o_rcv <= 0;
+	       baud_en <= 0;
 	       clear <= 0;
 	    end
 	  DATA_VALID:
 	    begin
 	       state <= IDLE;
 	       load <= 0;
-	       rcv <= 1;
+	       o_rcv <= 1;
+	       baud_en <= 0;
 	       clear <= 0;
 	    end
 	  default:
@@ -108,10 +114,11 @@
 	       state <= IDLE;
 	       clear <= 0;
 	       load <= 0;
-	       rcv <= 0;
+	       baud_en <= 0;
+	       o_rcv <= 0;
 	    end
-	end // always @ (posedge clk or negedge rstn)
-
+	endcase // case (state)
+   end // always @ (posedge clk or negedge rstn)
 endmodule // uart_rx
 
    

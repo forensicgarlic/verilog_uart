@@ -34,7 +34,7 @@ class UartMonitor(BusMonitor):
             if self.in_reset: 
                 for x,y in transaction.items():
                     self.log.debug("reset time %s -  %s : %s" %(get_sim_time("ns"),x,y))
-                self._recv(tuple(transaction.values()))
+                self._recv((first.value, second.value))
                 self.baud_count = self.baud_rate -1
                 self.transmitting = False
                 self.bits = 0
@@ -49,7 +49,7 @@ class UartMonitor(BusMonitor):
             elif self.baud_count == 0 and self.transmitting:
                 for x,y in transaction.items():
                     self.log.debug("baud  time %s -  %s : %s" %(get_sim_time("ns"),x,y))
-                self._recv(tuple(transaction.values()))
+                self._recv((first.value, second.value))
                 self.bits = self.bits + 1
                 if self.bits == 10:
                     self.transmitting = False

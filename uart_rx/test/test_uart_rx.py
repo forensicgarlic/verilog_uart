@@ -32,7 +32,7 @@ class UartRxMonitor(Monitor):
             if self.receiving == False:
                 # if we're not receiving, we need to check for receiving every reset cycle
                 yield RisingEdge(self.clock)
-                vec = self.rx.value
+                vec = self.rx.integer
                 self.log.debug("value of rx is %s while not receiving" % vec)
                 if self.reset_n is not None and self.reset_n == 0: 
                     self._recv((vec, True))
@@ -45,7 +45,7 @@ class UartRxMonitor(Monitor):
             else:
                 # wait another period, putting us into actual character bits
                 yield ClockCycles(self.clock, self.baud)
-                vec = self.rx.value
+                vec = self.rx.integer
                 self.log.debug("value of rx is %s while receiving" % vec)
                 self._recv((vec,False))
                 self.count = self.count + 1
@@ -70,11 +70,11 @@ class UartRxOMonitor(BusMonitor):
             rcv, data  = transaction_list_values
             if self.in_reset:
                 self.log.debug("reset: rcv %s, data %s" % (rcv, data))
-                self._recv((rcv.value, data.value))
+                self._recv((rcv.integer, data.integer))
             else:
                 if rcv == 1:
                     self.log.debug("got something: rcv %s, data %s" % (rcv, data))
-                    self._recv((rcv.value, data.value))
+                    self._recv((rcv.integer, data.integer))
                     
 class uart_rx_tb(object):
     def __init__(self, dut):
@@ -103,8 +103,8 @@ class uart_rx_tb(object):
             self.shift = 0
         else:
             self.bits = (self.bits + 1) % 10
-            self.shift = (self.shift << 1) + rx.value
-            self.dut._log.debug("bits %d, shift %d, rx.value %d" % (self.bits, self.shift, rx.value))
+            self.shift = (self.shift << 1) + rx.integer
+            self.dut._log.debug("bits %d, shift %d, rx.integer %d" % (self.bits, self.shift, rx.integer))
             if self.bits == 9:
                 self.output_expected.pop() #ugh
                 self.dut._log.debug("expected output len: %d" % len(self.output_expected.pop()))

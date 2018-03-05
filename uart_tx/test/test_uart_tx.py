@@ -7,7 +7,7 @@ from cocotb.monitors import BusMonitor
 from cocotb.drivers import BusDriver
 from cocotb.scoreboard import Scoreboard
 from cocotb.utils import get_sim_time
-
+from cocotb.binary import BinaryValue
 
 class UartMonitor(BusMonitor):
     def __init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
@@ -18,7 +18,7 @@ class UartMonitor(BusMonitor):
         self.baud_rate = baud_rate
         self.transmitting = False
         self.bits = 0
-        self.start_second = 0
+        self.start_data = 0
         
     @cocotb.coroutine
     def _monitor_recv(self):
@@ -27,21 +27,19 @@ class UartMonitor(BusMonitor):
             yield RisingEdge(self.clock)
             if self.transmitting: 
                 self.baud_count = (self.baud_count + 1) % self.baud_rate
-            transaction = self.bus.capture()
-            transaction_list_values =list(transaction.values())
-            first = transaction_list_values[0]
-            second = transaction_list_values[1]
+            transaction = dict(self.bus.capture())
             if self.in_reset: 
                 for x,y in transaction.items():
                     self.log.debug("reset time %s -  %s : %s" %(get_sim_time("ns"),x,y))
-                self._recv((first.value, second.value))
+                self._recv(transaction)
                 self.baud_count = self.baud_rate -1
                 self.transmitting = False
                 self.bits = 0
-            elif self.tts(self,transaction, first):
+            elif self.tts(self,transaction):
                 self.transmitting = True
                 self.bits = 0
-                self.start_second = second
+                if 'data' in transaction:
+                    self.start_data = transaction['data']
                 self.baud_count = self.baud_rate / 2
                 for x,y in transaction.items():
                     self.log.debug("start time %s -  %s : %s" %(get_sim_time("ns"),x,y))
@@ -49,7 +47,7 @@ class UartMonitor(BusMonitor):
             elif self.baud_count == 0 and self.transmitting:
                 for x,y in transaction.items():
                     self.log.debug("baud  time %s -  %s : %s" %(get_sim_time("ns"),x,y))
-                self._recv((first.value, second.value))
+                self._recv(transaction)
                 self.bits = self.bits + 1
                 if self.bits == 10:
                     self.transmitting = False
@@ -60,8 +58,8 @@ class UartOMonitor(UartMonitor):
 
     def __init__(self, entity, name, clock, baud_rate, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
         #looking for tx going down as a start of baud rate checks for character duration
-        def trigger_transmit_state(self,transaction, first):
-            return self.last_transaction != transaction and not self.transmitting and first == 0
+        def trigger_transmit_state(self,transaction):
+            return self.last_transaction != transaction and not self.transmitting and transaction['tx'] == 0
         UartMonitor.__init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset, reset_n, callback, event, bus_seperator)
 
         
@@ -71,8 +69,8 @@ class UartIMonitor(UartMonitor):
 
     def __init__(self, entity, name, clock, baud_rate, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
         #looking for start set high as start of baud rate checks for character duration.
-        def trigger_transmit_state(self, transaction, first):
-            return not self.transmitting and first == 1
+        def trigger_transmit_state(self, transaction):
+            return not self.transmitting and transaction['start'] == 1
         UartMonitor.__init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset, reset_n, callback, event, bus_seperator)
         
 class UartDriver(BusDriver):
@@ -88,7 +86,9 @@ class uart_tx_tb(object):
         self.output_mon = UartOMonitor(dut, "o", dut.clk, int(self.dut.BAUD), reset_n=dut.rstn)
         self.input_mon = UartIMonitor(dut, "i", dut.clk, int(self.dut.BAUD), reset_n=dut.rstn, callback = self.tx_model)
         self.input_drv = UartDriver(dut, "i", dut.clk ) #unused?
-        self.output_expected = [(1,0)] #i don't think this should be necessary... 
+        self.etx = BinaryValue(1)
+        self.eready = BinaryValue(0)
+        self.output_expected = [{'tx':self.etx,'ready':self.eready}] #i don't think this should be necessary... 
         self.scoreboard = Scoreboard(dut)
 
         #self.output_mon.log.setLevel(logging.DEBUG)
@@ -111,21 +111,27 @@ class uart_tx_tb(object):
             #print ("tx model call -- character %d:%d" % (self.input_mon.bits,len(self.output_expected)))
             #print (self.output_expected)
             if self.input_mon.bits == 0:
-                self.output_expected.pop() #ugh. are we putting in expectations for this cycle, or next? 
-                self.output_expected.append((0,0)) #start bit
-                self.shifter = self.input_mon.start_second 
+                self.output_expected.pop() #ugh. are we putting in expectations for this cycle, or next?
+                self.etx<=0
+                self.eready<=0
+                self.output_expected.append({'tx':self.etx,'ready':self.eready}) #start bit
+                self.shifter = self.input_mon.start_data 
                 #print ("transaction - %s,%s" %(transaction[0],transaction[1]))
             if self.input_mon.bits < 8:
-                self.output_expected.append((self.shifter % 2,0))
+                self.output_expected.append({'tx':self.shifter % 2,'ready':0})
                 self.shifter = self.shifter >> 1
             else: 
-                self.output_expected.append((1,0)) #stop bit
+                self.output_expected.append({'tx':1,'ready':0}) #stop bit
         else:
             #print ("tx model call -- idle :%d" % len(self.output_expected))
             if self.input_mon.in_reset:
-                self.output_expected.append((1,0))
+                self.etx<=1
+                self.eready<=0
+                self.output_expected.append({'tx':self.etx,'ready':self.eready})
             else:
-                self.output_expected.append((1,1))
+                self.etx<=1
+                self.eready<=1
+                self.output_expected.append({'tx':self.etx,'ready':self.eready})
         
     @cocotb.coroutine
     def reset_dut(self, reset, duration):

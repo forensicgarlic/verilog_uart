@@ -22,6 +22,6 @@ install:
   - cd ..
 script:
   - cd verilog_uart
-  - make
+  - make COCOTB_REDUCED_LOG_FMT=true
   - (exit $(find -name results.xml | xargs grep "failure message" | wc -l))
 

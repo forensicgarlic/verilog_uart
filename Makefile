@@ -2,7 +2,8 @@ COCOTB?=$(shell pwd)/../
 export COCOTB
 
 MODS := div/test \
-	    uart_tx/test \
+	uart_tx/test \
+	uart_rx/test \
 
 .PHONY: $(MODS)
 

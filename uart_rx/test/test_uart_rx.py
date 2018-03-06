@@ -32,22 +32,23 @@ class UartRxMonitor(Monitor):
             if self.receiving == False:
                 # if we're not receiving, we need to check for receiving every reset cycle
                 yield RisingEdge(self.clock)
-                vec = self.rx.integer
+                vec = self.rx
                 self.log.debug("value of rx is %s while not receiving" % vec)
                 if self.reset_n is not None and self.reset_n == 0: 
-                    self._recv((vec, True))
+                    self._recv({"vec":vec, "reset":True})
                 #if presumably receiving a character
                 if vec == 0:
                     self.receiving = True
                     #start us out sampling once per period, with a half period delay
                     yield ClockCycles(self.clock, self.baud /2)
-                    #may want to sample here to verify it wasn't a glitch falling edge? 
+                    #may want to sample here to verify it wasn't a glitch falling edge?
+                    self._recv({"vec":vec, "reset":False})
             else:
                 # wait another period, putting us into actual character bits
                 yield ClockCycles(self.clock, self.baud)
-                vec = self.rx.integer
+                vec = self.rx
                 self.log.debug("value of rx is %s while receiving" % vec)
-                self._recv((vec,False))
+                self._recv({"vec":vec,"reset":False})
                 self.count = self.count + 1
                 if self.count == 9:
                     self.receiving = False
@@ -62,54 +63,66 @@ class UartRxOMonitor(BusMonitor):
         
     @cocotb.coroutine
     def _monitor_recv(self):
-        yield Timer(1)
+        yield Timer(1) # gets us past x's on startup. 
         while True:
             yield RisingEdge(self.clock)
-            transaction = self.bus.capture()
-            transaction_list_values=list(transaction.values())
-            rcv, data  = transaction_list_values
+            transaction = dict(self.bus.capture())
+            rcv = transaction["rcv"]
+            data  = transaction["data"]
             if self.in_reset:
                 self.log.debug("reset: rcv %s, data %s" % (rcv, data))
-                self._recv((rcv.integer, data.integer))
+                self._recv({"rcv":rcv.integer, "data":data.integer})
             else:
                 if rcv == 1:
                     self.log.debug("got something: rcv %s, data %s" % (rcv, data))
-                    self._recv((rcv.integer, data.integer))
+                    self._recv({"rcv":rcv.integer, "data":data.integer})
                     
 class uart_rx_tb(object):
     def __init__(self, dut):
         self.dut = dut
         self.output_mon = UartRxOMonitor(dut, "o", dut.clk, int(self.dut.BAUD), reset_n=dut.rstn)
         self.input_mon = UartRxMonitor(dut.i_rx, dut.clk, int(self.dut.BAUD), reset_n=dut.rstn, callback=self.rx_model)
-        self.output_expected = [(0,0)]
+        self.output_expected = [{"rcv":0,"data":0}] # necessary because order of calls I think. 
         self.scoreboard = Scoreboard(dut)
         self.scoreboard.add_interface(self.output_mon, self.output_expected)
 
         self.output_mon.log.setLevel(logging.DEBUG)
-        self.input_mon.log.setLevel(logging.DEBUG)
+        self.input_mon.log.setLevel(logging.INFO)
         self.dut._log.setLevel(logging.DEBUG)
         self.scoreboard.log.setLevel(logging.INFO)
         
         self.dut.i_rx <= 1
         self.bits = 0
         self.shift = 0
+        self.last_reset = False
         
     def rx_model(self, transaction):
-        rx, in_reset = transaction
+        rx = transaction["vec"]
+        in_reset = transaction["reset"]
         self.dut._log.debug("model called at time %s with transaction %s %s in reset" %(get_sim_time("ns"),rx, in_reset))
         if in_reset:
-            self.output_expected.append((0,0))
+            self.dut._log.debug("output expected length: %d" % len(self.output_expected))
+            self.output_expected.append({"rcv":0,"data":0})
             self.bits = 0
             self.shift = 0
+            self.last_reset = True
         else:
+            self.shift = self.shift + (int(rx) << self.bits)
+            self.dut._log.debug("bits %d, shift %x, rx %d" % (self.bits, self.shift, rx))
             self.bits = (self.bits + 1) % 10
-            self.shift = (self.shift << 1) + rx.integer
-            self.dut._log.debug("bits %d, shift %d, rx.integer %d" % (self.bits, self.shift, rx.integer))
-            if self.bits == 9:
-                self.output_expected.pop() #ugh
-                self.dut._log.debug("expected output len: %d" % len(self.output_expected.pop()))
-                self.output_expected.append((1,self.shift>>2))
-                self.dut._log.debug("model expects uart output %d" % (self.shift>>2))
+            if self.bits == 0:
+                len_oe = len(self.output_expected)
+                if len_oe == 1 and self.last_reset:
+                    self.last_reset = False
+                    popped = self.output_expected.pop() #ugh
+                    self.dut._log.warning("popping data from output expected: %r" % popped)
+                elif len_oe > 1:
+                    self.dut._log.error("some nonsense with output expected happened")
+                self.dut._log.debug("expected output len: %d" % len(self.output_expected))
+                expected = (self.shift >> 1 ) % (1 << 8) 
+                self.output_expected.append({"rcv":1,"data":expected})
+                self.dut._log.debug("model expects uart output %s" % (bin(expected)))
+                self.shift = 0
             
             
 
@@ -126,8 +139,6 @@ class uart_rx_tb(object):
         self.dut._log.info("receiving char %s (%x) as %x" %(char, ord(char), shift))
         yield RisingEdge(self.dut.clk)
         self.dut._log.debug("output expected length is : %d" % len(self.output_expected))
-        # while this is the easiest place to call this, it feels like cheating.
-        self.output_expected.append((1,ord(char)))
         for i in range(10):
             self.dut.i_rx <= shift % 2
             shift = shift >> 1
@@ -156,4 +167,28 @@ def test_1_rcv_a_char(dut):
     yield Timer(10000)
     yield RisingEdge(dut.clk)
     yield tb.rcv_char('k')
-    yield Timer(2000000)
+    tb.dut._log.info("k test passed successfully")
+    yield Timer(1000000)
+    yield tb.rcv_char('K')
+    yield Timer(1000000)
+    tb.dut._log.info("output expected len %d " % len(tb.output_expected))
+
+@cocotb.test()
+def test_2_break(dut):
+    """
+    break in line, detect / don't spit out chars. 
+    """
+    tb = uart_rx_tb(dut)
+    cocotb.fork(Clock(dut.clk, 1000).start())
+
+    yield tb.reset_dut(10000)
+    yield Timer(10000)
+    yield RisingEdge(dut.clk)
+
+    tb.dut.i_rx <= 0
+
+    yield Timer(3000000)
+
+    #since the scoreboard is triggered by output, makesure
+    #the expected output isn't backed up.
+    print(len(tb.output_expected))

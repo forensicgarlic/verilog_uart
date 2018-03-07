@@ -87,9 +87,9 @@ class uart_rx_tb(object):
         self.scoreboard = Scoreboard(dut)
         self.scoreboard.add_interface(self.output_mon, self.output_expected)
 
-        self.output_mon.log.setLevel(logging.DEBUG)
+        self.output_mon.log.setLevel(logging.INFO)
         self.input_mon.log.setLevel(logging.INFO)
-        self.dut._log.setLevel(logging.DEBUG)
+        self.dut._log.setLevel(logging.INFO)
         self.scoreboard.log.setLevel(logging.INFO)
         
         self.dut.i_rx <= 1
@@ -120,11 +120,14 @@ class uart_rx_tb(object):
                 elif len_oe > 1:
                     self.dut._log.error("some nonsense with output expected happened")
                 self.dut._log.debug("expected output len: %d" % len(self.output_expected))
-                expected = (self.shift >> 1 ) % (1 << 8) 
-                self.output_expected.append({"rcv":1,"data":expected})
-                self.dut._log.debug("model expects uart output %s" % (bin(expected)))
-                self.shift = 0
-            
+
+                if self.shift >  1<<9:
+                    expected = (self.shift >> 1 ) % (1 << 8) 
+                    self.output_expected.append({"rcv":1,"data":expected})
+                    self.dut._log.debug("model expects uart output %s" % (bin(expected)))
+                    self.shift = 0
+                else:
+                    self.dut._log.info("break mode detected")
             
 
     @cocotb.coroutine
@@ -179,27 +182,23 @@ def test_2_break(dut):
     """
     break in line, detect / don't spit out chars. 
     """
-    #tb = uart_rx_tb(dut)
-
+    tb = uart_rx_tb(dut)
     cocotb.fork(Clock(dut.clk, 1000).start())
-
-    #yield tb.reset_dut(10000)
-    dut.rstn <= 0
-    yield Timer(10000)
-    dut.rstn <= 1
+    yield tb.reset_dut(10000)
 
     yield Timer(10000)
     yield RisingEdge(dut.clk)
-    dut.i_rx <= 0
-    re = RisingEdge(dut.o_rcv)
-    result = yield [Timer(3000000), re]
+    tb.dut.i_rx <= 0
+    re = RisingEdge(tb.dut.o_rcv)
+    result = yield [Timer(5000000), re]
 
     if result == re:
         raise TestFailure("break condition had output")
 
     #since the scoreboard is triggered by output, makesure
     #the expected output isn't backed up.
+    if len(tb.output_expected) > 0:
+        raise TestFailure("model had expected output still")
 
-    #print(len(tb.output_expected))
 
 

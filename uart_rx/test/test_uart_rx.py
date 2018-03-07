@@ -5,6 +5,7 @@ from cocotb.clock import Clock
 from cocotb.monitors import Monitor, BusMonitor
 from cocotb.scoreboard import Scoreboard
 from cocotb.utils import get_sim_time
+from cocotb.result import TestFailure
 
 class UartRxMonitor(Monitor):
     """ observe the RX input of a Uart """
@@ -175,20 +176,30 @@ def test_1_rcv_a_char(dut):
 
 @cocotb.test()
 def test_2_break(dut):
-    """
+    """
     break in line, detect / don't spit out chars. 
     """
-    tb = uart_rx_tb(dut)
-    cocotb.fork(Clock(dut.clk, 1000).start())
+    #tb = uart_rx_tb(dut)
 
-    yield tb.reset_dut(10000)
-    yield Timer(10000)
-    yield RisingEdge(dut.clk)
+    cocotb.fork(Clock(dut.clk, 1000).start())
 
-    tb.dut.i_rx <= 0
+    #yield tb.reset_dut(10000)
+    self.dut.rstn <= 0
+    yield Timer(10000)
+    self.dut.rstn <= 1
 
-    yield Timer(3000000)
+    yield Timer(10000)
+    yield RisingEdge(dut.clk)
+    tb.dut.i_rx <= 0
+    re = RisingEdge(dut.o_rcv)
+    result = yield [Timer(3000000), re]
 
-    #since the scoreboard is triggered by output, makesure
-    #the expected output isn't backed up.
-    print(len(tb.output_expected))
+    if result == re:
+        raise TestFailure("break condition had output")
+
+    #since the scoreboard is triggered by output, makesure
+    #the expected output isn't backed up.
+
+    #print(len(tb.output_expected))
+
+

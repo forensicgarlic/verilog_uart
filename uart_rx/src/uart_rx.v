@@ -84,10 +84,10 @@
 	    end
 	  RCV:
 	    begin
-	       if (cnt == 10 && rx_q == 1)
+	       if (cnt == 10)// && rx_q == 1)
 		 state <= LOAD;
-	       else if (cnt == 10 && rx_q == 0)
-		 state <= IDLE;
+//	       else if (cnt == 10 && rx_q == 0)
+//		 state <= IDLE;
 	       else
 		 state <= RCV;
 	       load <= 0;

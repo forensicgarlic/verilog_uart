@@ -86,7 +86,9 @@
 	    begin
 	       if (cnt == 10 && rx_q == 1)
 		 state <= LOAD;
-	       else if (cnt == 10 && rx_q == 0)
+	       else if (cnt == 10 && rx_q == 0) // break or frame error
+		 state <= IDLE;
+	       else if (cnt == 0 && rx_q == 1) // glitch in line
 		 state <= IDLE;
 	       else
 		 state <= RCV;

@@ -38,8 +38,9 @@ class UartRxMonitor(Monitor):
                 if self.reset_n is not None and self.reset_n == 0: 
                     self._recv({"vec":vec, "reset":True})
                 #if presumably receiving a character
-                if vec == 0:
+                elif vec == 0:
                     self.receiving = True
+                    self.count = 0
                     #start us out sampling once per period, with a half period delay
                     yield ClockCycles(self.clock, self.baud /2)
                     #may want to sample here to verify it wasn't a glitch falling edge?
@@ -50,7 +51,7 @@ class UartRxMonitor(Monitor):
                 vec = self.rx
                 self.log.debug("value of rx is %s while receiving" % vec)
                 self._recv({"vec":vec,"reset":False})
-                self.count = self.count + 1
+                self.count = self.count + 1 
                 if self.count == 9:
                     self.receiving = False
                     
@@ -121,14 +122,14 @@ class uart_rx_tb(object):
                     self.dut._log.error("some nonsense with output expected happened")
                 self.dut._log.debug("expected output len: %d" % len(self.output_expected))
 
-                if self.shift >  1<<9:
+                if self.shift >=  (1<<9) :
                     expected = (self.shift >> 1 ) % (1 << 8) 
                     self.output_expected.append({"rcv":1,"data":expected})
                     self.dut._log.debug("model expects uart output %s" % (bin(expected)))
-                    self.shift = 0
                 else:
                     self.dut._log.info("break mode detected")
-            
+
+                self.shift = 0
 
     @cocotb.coroutine
     def reset_dut(self, duration):
@@ -142,7 +143,7 @@ class uart_rx_tb(object):
         shift = (ord(char)*2 )+ 2**9
         self.dut._log.info("receiving char %s (%x) as %x" %(char, ord(char), shift))
         yield RisingEdge(self.dut.clk)
-        self.dut._log.debug("output expected length is : %d" % len(self.output_expected))
+        #self.dut._log.debug("output expected length is : %d" % len(self.output_expected))
         for i in range(10):
             self.dut.i_rx <= shift % 2
             shift = shift >> 1
@@ -202,3 +203,56 @@ def test_2_break(dut):
 
 
 
+@cocotb.test()
+def test_3_fast_and_many(dut):
+    """
+    rcv characters fast
+    """
+    tb = uart_rx_tb(dut)
+    cocotb.fork(Clock(dut.clk, 1000).start())
+    yield tb.reset_dut(10000)
+
+    yield Timer(10000)
+    yield RisingEdge(dut.clk)
+
+    my_char = ord(' ')
+    for i in range(300):
+        yield tb.rcv_char(chr((my_char + i) % 256))
+    
+
+@cocotb.test()
+def test_4_reset(dut):
+    """
+    character's received during reset are ignored. 
+    """
+    tb = uart_rx_tb(dut)
+    cocotb.fork(Clock(dut.clk, 1000).start())
+    yield tb.reset_dut(10000)
+    tb.dut.rstn <= 0
+
+    yield Timer(10000)
+    yield RisingEdge(dut.clk)
+
+    my_char = ord('a')
+    for i in range(3):
+        yield tb.rcv_char(chr((my_char + i) % 256))
+
+
+@cocotb.test()
+def test_5_spurious(dut):
+    """
+    character's received during reset are ignored. 
+    """
+    tb = uart_rx_tb(dut)
+    cocotb.fork(Clock(dut.clk, 1000).start())
+    yield tb.reset_dut(10000)
+
+    yield Timer(10000)
+    yield RisingEdge(dut.clk)
+
+    for i in range(10):
+        tb.dut.i_rx <= 0
+        yield Timer(i)
+        tb.dut.i_rx <= 1
+        yield Timer(2000000)
+        

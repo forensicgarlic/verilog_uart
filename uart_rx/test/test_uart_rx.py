@@ -22,12 +22,10 @@ class UartRxMonitor(Monitor):
     @cocotb.coroutine
     def _monitor_recv(self):
         # this coroutine's responsibility is to sample at the points
-        # where it's interesting in your testbench to have expected output.
-        # this probably lines up with when you have actual output. 
+        # where it's interesting in your testbench to know what the input was,
+        # presumably because it'll have an effect on expected output.
         # sometimes that's just every clockcycle, but for uarts, it's often
         # once per baud period, when you know you're receiving / transmitting
-        # but on the receive side, you probably don't care about sampling unless
-        # you're verifying reset, or your data valid signal is active. 
         yield Timer(1)
         while True:
             if self.receiving == False:
@@ -43,7 +41,7 @@ class UartRxMonitor(Monitor):
                     self.count = 0
                     #start us out sampling once per period, with a half period delay
                     yield ClockCycles(self.clock, self.baud /2)
-                    #may want to sample here to verify it wasn't a glitch falling edge?
+                    #we want to sample here to verify it wasn't a glitch falling edge
                     self._recv({"vec":vec, "reset":False})
             else:
                 # wait another period, putting us into actual character bits
@@ -84,7 +82,7 @@ class uart_rx_tb(object):
         self.dut = dut
         self.output_mon = UartRxOMonitor(dut, "o", dut.clk, int(self.dut.BAUD), reset_n=dut.rstn)
         self.input_mon = UartRxMonitor(dut.i_rx, dut.clk, int(self.dut.BAUD), reset_n=dut.rstn, callback=self.rx_model)
-        self.output_expected = [{"rcv":0,"data":0}] # necessary because order of calls I think. 
+        self.output_expected = [{"rcv":0,"data":0}] # necessary because order of calls  
         self.scoreboard = Scoreboard(dut)
         self.scoreboard.add_interface(self.output_mon, self.output_expected)
 
@@ -143,7 +141,6 @@ class uart_rx_tb(object):
         shift = (ord(char)*2 )+ 2**9
         self.dut._log.info("receiving char %s (%x) as %x" %(char, ord(char), shift))
         yield RisingEdge(self.dut.clk)
-        #self.dut._log.debug("output expected length is : %d" % len(self.output_expected))
         for i in range(10):
             self.dut.i_rx <= shift % 2
             shift = shift >> 1
@@ -151,14 +148,6 @@ class uart_rx_tb(object):
         
 
         
-# tests:
-# detect break condition (or at least, don't spit out rcvs)
-# rcv a character
-# rcv characters fast
-# characters received in reset are ignored
-# ignore spurious pulses
-# framing error flag? 
-
 @cocotb.test()
 def test_1_rcv_a_char(dut):
     """
@@ -201,8 +190,6 @@ def test_2_break(dut):
     if len(tb.output_expected) > 0:
         raise TestFailure("model had expected output still")
 
-
-
 @cocotb.test()
 def test_3_fast_and_many(dut):
     """
@@ -241,7 +228,7 @@ def test_4_reset(dut):
 @cocotb.test()
 def test_5_spurious(dut):
     """
-    character's received during reset are ignored. 
+    glitches in the input line don't trigger a character output
     """
     tb = uart_rx_tb(dut)
     cocotb.fork(Clock(dut.clk, 1000).start())

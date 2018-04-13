@@ -4,6 +4,7 @@ export COCOTB
 MODS := div/test \
 	uart_tx/test \
 	uart_rx/test \
+	uart/test \
 
 .PHONY: $(MODS)
 

@@ -26,11 +26,14 @@
       $dumpvars(0, uart_rx);
    end
 
-   
+   // register the input
+   // we could add another register here if we were
+   // worried about metastability. 
    always @ (posedge clk) begin
       rx_q <= i_rx;
    end
-   
+
+   // shift register for the output
    always @ (posedge clk or negedge rstn) begin
       if (rstn == 0)
 	shift_in <= 0;
@@ -38,6 +41,7 @@
 	shift_in <= {rx_q, shift_in[9:1]};
    end
 
+   // load output when we've gotten through the state machine
    always @ (posedge clk or negedge rstn) begin
       if (rstn == 0)
 	o_data <= 0;
@@ -45,10 +49,11 @@
 	o_data <= shift_in[8:1];
    end
 
+   // baud rate pulse gen
    div #(BAUD, BAUD/2)
    baudgen (.clk_in(clk), .clk_en(baud_en), .pulse_out(clk_baud));
    
-      
+   // bit counter
    always @ (posedge clk) begin
       if (clear == 1)
 	cnt <= 0;

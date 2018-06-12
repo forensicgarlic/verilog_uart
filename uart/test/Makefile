@@ -5,10 +5,10 @@ COCOTB=$(PWD)/../../../cocotb
 
 WPWD=$(shell pwd)
 
-TOPLEVEL := uart_rx
-MODULE := test_uart_rx
+TOPLEVEL := uart
+MODULE := test_uart
 
-VERILOG_SOURCES = $(WPWD)/../src/uart_rx.v $(WPWD)/../../div/src/div.v
+VERILOG_SOURCES = $(WPWD)/../src/uart.v $(WPWD)/../../uart_rx/src/uart_rx.v $(WPWD)/../../div/src/div.v $(WPWD)/../../uart_tx/src/uart_tx.v 
 #COMPILE_ARGS=-P div.PERIOD=10
 
 include $(COCOTB)/makefiles/Makefile.inc

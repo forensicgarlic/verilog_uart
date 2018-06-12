@@ -15,4 +15,4 @@ make install
 RUN apt-get install -y swig
 
 #cocotb doesn't have a good way to install
-RUN git clone https://github.com/potentialventures/cocotb
+#RUN git clone https://github.com/potentialventures/cocotb

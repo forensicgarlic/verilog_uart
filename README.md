@@ -1,7 +1,7 @@
 # verilog_uart
 verilog uart tested on the lattice ice40 and simulated using cocotb receiving 8 bit streams, inspired by Obijuan / open-fpga-verilog-tutorial and ZipCPU / wbuart32
 
-#Bootstrapping the verilog uart repo
+# Bootstrapping the verilog uart repo
 
     sudo apt install git
 
@@ -21,11 +21,11 @@ build the docker to run things:
 
 run the docker image interactively
 
-    docker run -it bash --rm
+    docker run -it --rm -v ~/<git directory>:/<git directory> vu bash 
 
--i (interactively)
--t (pseudo tty)
---rm (remove container when done) 
+-i (interactively) 
+-t (pseudo tty)  
+--rm (remove container when done)  
 -v <local directory>:<name to use in docker> (allows docker to access <local directory> at <name to use in docker> location
 
     cd verilog_uart

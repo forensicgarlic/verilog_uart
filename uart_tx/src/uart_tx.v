@@ -1,5 +1,5 @@
 `default_nettype none
-`include "../src/baudgen.vh"
+`include "../../uart_tx/src/baudgen.vh"
 
 
   module uart_tx

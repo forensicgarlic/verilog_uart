@@ -1,5 +1,5 @@
 sudo: required
-dist: trusty
+dist: xenial
 group: deprecated-2017Q4
 language: python
 python:

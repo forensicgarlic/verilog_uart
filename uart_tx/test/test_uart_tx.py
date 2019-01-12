@@ -9,7 +9,7 @@ from cocotb.scoreboard import Scoreboard
 from cocotb.utils import get_sim_time
 from cocotb.binary import BinaryValue
 
-class UartMonitor(BusMonitor):
+class UartTxMonitor(BusMonitor):
     def __init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
         BusMonitor.__init__(self, entity, name, clock, reset, reset_n, callback, event, bus_seperator)
         self.tts = trigger_transmit_state
@@ -53,17 +53,17 @@ class UartMonitor(BusMonitor):
                     self.transmitting = False
             self.last_transaction = transaction
             
-class UartOMonitor(UartMonitor):
+class UartTxOMonitor(UartTxMonitor):
     _signals = [ "tx", "ready"]
 
     def __init__(self, entity, name, clock, baud_rate, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
         #looking for tx going down as a start of baud rate checks for character duration
         def trigger_transmit_state(self,transaction):
             return self.last_transaction != transaction and not self.transmitting and transaction['tx'] == 0
-        UartMonitor.__init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset, reset_n, callback, event, bus_seperator)
+        UartTxMonitor.__init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset, reset_n, callback, event, bus_seperator)
 
         
-class UartIMonitor(UartMonitor):
+class UartTxIMonitor(UartTxMonitor):
     _signals = [ "start", "data" ]
 
 
@@ -71,9 +71,9 @@ class UartIMonitor(UartMonitor):
         #looking for start set high as start of baud rate checks for character duration.
         def trigger_transmit_state(self, transaction):
             return not self.transmitting and transaction['start'] == 1
-        UartMonitor.__init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset, reset_n, callback, event, bus_seperator)
+        UartTxMonitor.__init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset, reset_n, callback, event, bus_seperator)
         
-class UartDriver(BusDriver):
+class UartTxDriver(BusDriver):
     _signals = [ "start", "data"]
     def __init__(self, entity, name, clock):
         BusDriver.__init__(self, entity, name, clock)
@@ -83,9 +83,9 @@ class UartDriver(BusDriver):
 class uart_tx_tb(object):
     def __init__(self, dut):
         self.dut = dut
-        self.output_mon = UartOMonitor(dut, "o", dut.clk, int(self.dut.BAUD), reset_n=dut.rstn)
-        self.input_mon = UartIMonitor(dut, "i", dut.clk, int(self.dut.BAUD), reset_n=dut.rstn, callback = self.tx_model)
-        self.input_drv = UartDriver(dut, "i", dut.clk ) #unused?
+        self.output_mon = UartTxOMonitor(dut, "o", dut.clk, int(self.dut.BAUD), reset_n=dut.rstn)
+        self.input_mon = UartTxIMonitor(dut, "i", dut.clk, int(self.dut.BAUD), reset_n=dut.rstn, callback = self.tx_model)
+        self.input_drv = UartTxDriver(dut, "i", dut.clk ) #initializer only
         self.etx = BinaryValue(1)
         self.eready = BinaryValue(0)
         self.output_expected = [{'tx':self.etx,'ready':self.eready}] #i don't think this should be necessary... 

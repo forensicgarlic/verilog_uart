@@ -24,10 +24,10 @@
    
    localparam DEFAULT_DATA = 10'h2FF;
 
-   initial begin
-      $dumpfile("uart_tx.vcd");
-      $dumpvars(0, uart_tx);
-   end
+   //initial begin
+   //   $dumpfile("uart_tx.vcd");
+   //   $dumpvars(0, uart_tx);
+   //end
 
    // register inputs and outputs
    always @ (posedge clk) begin

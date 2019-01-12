@@ -21,10 +21,10 @@
    reg [1:0] 	state = 0;
  	
 
-   initial begin
-      $dumpfile("uart_rx.vcd");
-      $dumpvars(0, uart_rx);
-   end
+   //initial begin
+   //   $dumpfile("uart_rx.vcd");
+   //   $dumpvars(0, uart_rx);
+   //end
 
    // register the input
    // we could add another register here if we were

@@ -26,9 +26,6 @@ module uart
    assign o_tx = tx;
    assign o_tx_ready = tx_ready;
    
-   
-       
-   
    initial begin
       $dumpfile("uart.vcd");
       $dumpvars(0, uart);

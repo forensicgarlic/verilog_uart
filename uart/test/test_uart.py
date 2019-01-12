@@ -3,6 +3,7 @@ import logging
 from cocotb.triggers import Timer, RisingEdge, ClockCycles
 from cocotb.clock import Clock
 from cocotb.monitors import Monitor, BusMonitor
+from cocotb.drivers import BusDriver
 from cocotb.scoreboard import Scoreboard
 from cocotb.utils import get_sim_time
 from cocotb.result import TestFailure
@@ -50,12 +51,12 @@ class UartRxMonitor(Monitor):
                 self.log.debug("value of rx is %s while receiving" % vec)
                 self._recv({"vec":vec,"reset":False})
                 self.count = self.count + 1 
-                if self.count == 9:
+                if self.count == 9: #is a magic number necessary? 
                     self.receiving = False
                     
                 
 class UartRxOMonitor(BusMonitor):
-    _signals = [ "rcv", "data"]
+    _signals = [ "rx_data_valid", "rx_data"]
     def __init__(self, entity, name, clock, baud_rate, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
         BusMonitor.__init__(self, entity, name, clock, reset, reset_n, callback, event, bus_seperator)
         self.baud_rate = baud_rate
@@ -67,27 +68,98 @@ class UartRxOMonitor(BusMonitor):
         while True:
             yield RisingEdge(self.clock)
             transaction = dict(self.bus.capture())
-            rcv = transaction["rcv"]
-            data  = transaction["data"]
+            rcv = transaction["rx_data_valid"]
+            data  = transaction["rx_data"]
             if self.in_reset:
-                self.log.debug("reset: rcv %s, data %s" % (rcv, data))
-                self._recv({"rcv":rcv.integer, "data":data.integer})
+                self.log.debug("reset: rx_valid %s, rx_data %s" % (rcv, data))
+                self._recv({"rx_data_valid":rcv.integer, "rx_data":data.integer})
             else:
                 if rcv == 1:
-                    self.log.debug("got something: rcv %s, data %s" % (rcv, data))
-                    self._recv({"rcv":rcv.integer, "data":data.integer})
+                    self.log.debug("got something: rx_valid %s, rx_data %s" % (rx_data_valid, rx_data))
+                    self._recv({"rx_data_valid":rcv.integer, "rx_data":data.integer})
+
+class UartTxMonitor(BusMonitor):
+    def __init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
+        BusMonitor.__init__(self, entity, name, clock, reset, reset_n, callback, event, bus_seperator)
+        self.tts = trigger_transmit_state
+        self.last_transaction = None
+        self.baud_count = 0
+        self.baud_rate = baud_rate
+        self.transmitting = False
+        self.bits = 0
+        self.start_data = 0
+        
+    @cocotb.coroutine
+    def _monitor_recv(self):
+        yield Timer(1)
+        while True:
+            yield RisingEdge(self.clock)
+            if self.transmitting: 
+                self.baud_count = (self.baud_count + 1) % self.baud_rate
+            transaction = dict(self.bus.capture())
+            if self.in_reset: 
+                for x,y in transaction.items():
+                    self.log.debug("reset time %s -  %s : %s" %(get_sim_time("ns"),x,y))
+                self._recv(transaction)
+                self.baud_count = self.baud_rate -1
+                self.transmitting = False
+                self.bits = 0
+            elif self.tts(self,transaction):
+                self.transmitting = True
+                self.bits = 0
+                if 'data' in transaction:
+                    self.start_data = transaction['rx_data']
+                self.baud_count = self.baud_rate / 2
+                for x,y in transaction.items():
+                    self.log.debug("start time %s -  %s : %s" %(get_sim_time("ns"),x,y))
+                self.last_transaction = transaction
+            elif self.baud_count == 0 and self.transmitting:
+                for x,y in transaction.items():
+                    self.log.debug("baud  time %s -  %s : %s" %(get_sim_time("ns"),x,y))
+                self._recv(transaction)
+                self.bits = self.bits + 1
+                if self.bits == 10:
+                    self.transmitting = False
+            self.last_transaction = transaction
+            
+class UartTxOMonitor(UartTxMonitor):
+    _signals = [ "tx", "tx_ready"]
+
+    def __init__(self, entity, name, clock, baud_rate, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
+        #looking for tx going down as a start of baud rate checks for character duration
+        def trigger_transmit_state(self,transaction):
+            return self.last_transaction != transaction and not self.transmitting and transaction['tx'] == 0
+        UartTxMonitor.__init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset, reset_n, callback, event, bus_seperator)
+
+        
+class UartTxIMonitor(UartTxMonitor):
+    _signals = [ "tx_start", "tx_data" ]
+
+    def __init__(self, entity, name, clock, baud_rate, reset=None, reset_n=None, callback=None, event=None, bus_seperator="_"):
+        #looking for start set high as start of baud rate checks for character duration.
+        def trigger_transmit_state(self, transaction):
+            return not self.transmitting and transaction['start'] == 1
+        UartTxMonitor.__init__(self, entity, name, clock, baud_rate, trigger_transmit_state, reset, reset_n, callback, event, bus_seperator)
+        
+class UartTxDriver(BusDriver):
+    _signals = [ "tx_start", "tx_data"]
+    def __init__(self, entity, name, clock):
+        BusDriver.__init__(self, entity, name, clock)
+        self.bus.start.setimmediatevalue(0)
+        self.bus.data.setimmediatevalue(0)
+
                     
-class uart_rx_tb(object):
+class uart_tb(object):
     def __init__(self, dut):
         self.dut = dut
-        self.output_mon = UartRxOMonitor(dut, "o", dut.clk, int(self.dut.BAUD), reset_n=dut.rstn)
-        self.input_mon = UartRxMonitor(dut.i_rx, dut.clk, int(self.dut.BAUD), reset_n=dut.rstn, callback=self.rx_model)
-        self.output_expected = [{"rcv":0,"data":0}] # necessary because order of calls  
+        self.output_rx_mon = UartRxOMonitor(dut, "o", dut.clk, int(self.dut.BAUD), reset_n=dut.rstn)
+        self.input_rx_mon = UartRxMonitor(dut.i_rx, dut.clk, int(self.dut.BAUD), reset_n=dut.rstn, callback=self.rx_model)
+        self.output_expected = [{"rx_data_valid":0,"rx_data":0}] # necessary because order of calls  
         self.scoreboard = Scoreboard(dut)
-        self.scoreboard.add_interface(self.output_mon, self.output_expected)
+        self.scoreboard.add_interface(self.output_rx_mon, self.output_expected)
 
-        self.output_mon.log.setLevel(logging.INFO)
-        self.input_mon.log.setLevel(logging.INFO)
+        self.output_rx_mon.log.setLevel(logging.INFO)
+        self.input_rx_mon.log.setLevel(logging.INFO)
         self.dut._log.setLevel(logging.INFO)
         self.scoreboard.log.setLevel(logging.INFO)
         
@@ -102,7 +174,7 @@ class uart_rx_tb(object):
         self.dut._log.debug("model called at time %s with transaction %s %s in reset" %(get_sim_time("ns"),rx, in_reset))
         if in_reset:
             self.dut._log.debug("output expected length: %d" % len(self.output_expected))
-            self.output_expected.append({"rcv":0,"data":0})
+            self.output_expected.append({"rx_data_valid":0,"rx_data":0})
             self.bits = 0
             self.shift = 0
             self.last_reset = True
@@ -122,7 +194,7 @@ class uart_rx_tb(object):
 
                 if self.shift >=  (1<<9) :
                     expected = (self.shift >> 1 ) % (1 << 8) 
-                    self.output_expected.append({"rcv":1,"data":expected})
+                    self.output_expected.append({"rx_data_valid":1,"rx_data":expected})
                     self.dut._log.debug("model expects uart output %s" % (bin(expected)))
                 else:
                     self.dut._log.info("break mode detected")
@@ -146,15 +218,23 @@ class uart_rx_tb(object):
             shift = shift >> 1
             yield ClockCycles(self.dut.clk, int(self.dut.BAUD))
         
+    @cocotb.coroutine
+    def set_char(self, char):
+        yield RisingEdge(self.dut.clk)
+        self.dut.i_data <= ord(char)
+        self.dut.i_start <= 1
+        yield RisingEdge(self.dut.clk)
+        self.dut.i_start <= 0
+        self.dut._log.info("sent char %s" % char)
 
         
 @cocotb.test()
-def test_1_rcv_a_char(dut):
+def test_1_rcv_and_xmt(dut):
     """
-    basic test, receive a character
+    basic test, receive and xmt a char
     """
-    tb = uart_rx_tb(dut)
-    tb.dut._log.info("running uartrx test")
+    tb = uart_tb(dut)
+    tb.dut._log.info("running uart test rcv and xmt")
     cocotb.fork(Clock(dut.clk, 1000).start())
 
     yield tb.reset_dut(10000)
@@ -168,18 +248,18 @@ def test_1_rcv_a_char(dut):
     tb.dut._log.info("output expected len %d " % len(tb.output_expected))
 
 @cocotb.test()
-def test_2_break(dut):
+def test_2_xmt_and_rcv(dut):
     """
-    break in line, detect / don't spit out chars. 
+    simple test to loopback xmt and rcv  
     """
-    tb = uart_rx_tb(dut)
+    tb = uart_tb(dut)
     cocotb.fork(Clock(dut.clk, 1000).start())
     yield tb.reset_dut(10000)
 
     yield Timer(10000)
     yield RisingEdge(dut.clk)
     tb.dut.i_rx <= 0
-    re = RisingEdge(tb.dut.o_rcv)
+    re = RisingEdge(tb.dut.o_rx_data_valid)
     result = yield [Timer(5000000), re]
 
     if result == re:
@@ -190,56 +270,3 @@ def test_2_break(dut):
     if len(tb.output_expected) > 0:
         raise TestFailure("model had expected output still")
 
-@cocotb.test()
-def test_3_fast_and_many(dut):
-    """
-    rcv characters fast
-    """
-    tb = uart_rx_tb(dut)
-    cocotb.fork(Clock(dut.clk, 1000).start())
-    yield tb.reset_dut(10000)
-
-    yield Timer(10000)
-    yield RisingEdge(dut.clk)
-
-    my_char = ord(' ')
-    for i in range(300):
-        yield tb.rcv_char(chr((my_char + i) % 256))
-    
-
-@cocotb.test()
-def test_4_reset(dut):
-    """
-    character's received during reset are ignored. 
-    """
-    tb = uart_rx_tb(dut)
-    cocotb.fork(Clock(dut.clk, 1000).start())
-    yield tb.reset_dut(10000)
-    tb.dut.rstn <= 0
-
-    yield Timer(10000)
-    yield RisingEdge(dut.clk)
-
-    my_char = ord('a')
-    for i in range(3):
-        yield tb.rcv_char(chr((my_char + i) % 256))
-
-
-@cocotb.test()
-def test_5_spurious(dut):
-    """
-    glitches in the input line don't trigger a character output
-    """
-    tb = uart_rx_tb(dut)
-    cocotb.fork(Clock(dut.clk, 1000).start())
-    yield tb.reset_dut(10000)
-
-    yield Timer(10000)
-    yield RisingEdge(dut.clk)
-
-    for i in range(10):
-        tb.dut.i_rx <= 0
-        yield Timer(i)
-        tb.dut.i_rx <= 1
-        yield Timer(2000000)
-        

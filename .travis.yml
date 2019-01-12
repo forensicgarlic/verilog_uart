@@ -13,7 +13,7 @@ before_install:
   - sh autoconf.sh 
   - ./configure 
   - make 
-  - make -s install 
+  - sudo make -s install 
   - rm -r /usr/src/iverilog
   - cd .. 
 install:

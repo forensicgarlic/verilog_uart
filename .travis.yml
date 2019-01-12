@@ -23,6 +23,7 @@ install:
   - cd ..
 script:
   - cd verilog_uart
-  - make COCOTB_REDUCED_LOG_FMT=true COCOTB_ANSI_OUTPUT=0
+  - make COCOTB_ANSI_OUTPUT=0
+  - find -name results.xml
   - (exit $(find -name results.xml | xargs grep "failure message" | wc -l))
 

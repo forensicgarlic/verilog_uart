@@ -7,13 +7,12 @@ python:
 before_install:
   - sudo add-apt-repository -y ppa:team-electronics/ppa
   - sudo apt-get update -qq
-  - wget ftp://icarus.com/pub/eda/verilog/v10/verilog-10.2.tar.gz
-  - tar xvf verilog-10.2.tar.gz
-  - cd verilog-10.2
-  - ./configure
-  - make
-  - sudo make install
-  - cd ..
+  - git clone https://github.com/steveicarus/iverilog.git --depth=1 --branch v10_2 . 
+  - sh autoconf.sh 
+  - ./configure 
+  - make 
+  - make -s install 
+  - rm -r /usr/src/iverilog 
 install:
   - cd ..
   - git clone https://github.com/forensicgarlic/cocotb
